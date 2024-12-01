@@ -13,8 +13,10 @@ def fetch_google_sheet(sheet_id, gid):
     if response.status_code == 200:
         print("Successfully fetched Google Sheet data.")
         decoded_content = response.content.decode('utf-8')
+        print(f"Raw fetched data:\n{decoded_content}")  # Debug raw data
         reader = csv.reader(decoded_content.splitlines())
         data = [row for row in reader]
+        print(f"Parsed data: {data}")  # Debug parsed data
         print(f"Fetched {len(data)} rows from the sheet.")
         return data
     else:
@@ -52,25 +54,29 @@ def fetch_price_flipkart(url):
 def check_price_changes(data):
     print("Checking for price changes...")
     changes = []
-    for row in data[1:]:  # Skip header row
-        url, prev_price = row[0], float(row[1])
-        print(f"Processing URL: {url} with Previous Price: ₹{prev_price}")
-        
-        if "amazon" in url:
-            current_price = fetch_price_amazon(url)
-        elif "flipkart" in url:
-            current_price = fetch_price_flipkart(url)
-        else:
-            print(f"Skipping unknown URL format: {url}")
-            continue
-        
-        if current_price is not None:
-            print(f"Current Price for {url}: ₹{current_price}")
-            if current_price != prev_price:
-                print(f"Price change detected for {url}: Previous: ₹{prev_price}, Current: ₹{current_price}")
-                changes.append([url, prev_price, current_price])
+    for i, row in enumerate(data, start=1):  # No skipping, start index from 1
+        print(f"Processing row {i}: {row}")
+        try:
+            url, prev_price = row[0].strip(), float(row[1].strip())
+            print(f"URL: {url}, Previous Price: ₹{prev_price}")
+            
+            if "amazon" in url:
+                current_price = fetch_price_amazon(url)
+            elif "flipkart" in url:
+                current_price = fetch_price_flipkart(url)
             else:
-                print(f"No price change for {url}.")
+                print(f"Skipping unknown URL format: {url}")
+                continue
+            
+            if current_price is not None:
+                print(f"Current Price for {url}: ₹{current_price}")
+                if current_price != prev_price:
+                    print(f"Price change detected for {url}: Previous: ₹{prev_price}, Current: ₹{current_price}")
+                    changes.append([url, prev_price, current_price])
+                else:
+                    print(f"No price change for {url}.")
+        except Exception as e:
+            print(f"Error processing row {i}: {row}. Error: {e}")
     return changes
 
 # Send email
@@ -118,13 +124,16 @@ def main():
     print(f"URL Data: {url_data}")
     print(f"Email Data: {email_data}")
 
+    # Parse email addresses
+    emails = [email.strip() for email in email_data[0][0].split(',')]
+    print(f"Parsed Emails: {emails}")
+
     # Check price changes
     changes = check_price_changes(url_data)
 
     # Notify users
     if changes:
         print("Detected price changes. Sending notifications...")
-        emails = [row[0] for row in email_data[1:]]  # Skip header row
         for email in emails:
             send_email(email, changes)
     else:
