@@ -122,7 +122,6 @@ def check_price_changes(url_data, price_file):
             print(f"Could not fetch price for {url}")
 
     # Save updated prices
-    print("Updated prices to be saved:", updated_prices)
     save_current_prices(price_file, updated_prices)
     return changes
 
@@ -174,10 +173,10 @@ def commit_and_push_to_git(file_path, commit_message="Update prices"):
 def main():
     print("Starting the Price Checker script...")
     # Google Sheet IDs
-    sheet_id = "1rEWuNwnxkJ8nWyz__lqJbNvykOp5jjtm1iSIADdskQI"  # Replace with your actual Google Sheet ID
-    url_gid = "1012817683"  # Sheet tab ID for product URLs
-    email_gid = "1112713903"  # Sheet tab ID for email addresses
-    price_file = "previous_prices.csv"  # Local file to store prices
+    sheet_id = "1rEWuNwnxkJ8nWyz__lqJbNvykOp5jjtm1iSIADdskQI"
+    url_gid = "1012817683"
+    email_gid = "1112713903"
+    price_file = "prev_prices.csv"  # Updated file name for storing prices
 
     # Fetch product URLs and email addresses
     url_data = fetch_google_sheet(sheet_id, url_gid)
@@ -196,7 +195,7 @@ def main():
 
     # Notify users if changes detected
     if changes:
-        print("Detected price changes. Sending notifications...")
+        print("Price changes detected. Sending notifications...")
         for email in emails:
             send_email(email, changes)
         commit_and_push_to_git(price_file, "Update product prices after script run")
