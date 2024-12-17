@@ -13,52 +13,66 @@ def fetch_google_sheet(sheet_id, gid):
     if response.status_code == 200:
         print("Successfully fetched Google Sheet data.")
         decoded_content = response.content.decode('utf-8')
-        print(f"Raw fetched data:\n{decoded_content}")  # Debug raw data
         reader = csv.reader(decoded_content.splitlines())
         data = [row for row in reader]
-        print(f"Parsed data: {data}")  # Debug parsed data
         print(f"Fetched {len(data)} rows from the sheet.")
         return data
     else:
         print(f"Failed to fetch data from Sheet GID {gid}. Status code: {response.status_code}")
         return []
 
-# Scrape prices from Amazon
-def fetch_price_amazon(url):
-    print(f"Fetching price for Amazon URL: {url}")
-    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, 'html.parser')
-        # Locate the price element based on the provided structure
-        price_whole = soup.find('span', {'class': 'a-price-whole'})
-        price_fraction = soup.find('span', {'class': 'a-price-fraction'})  # Handle fractional parts if present
-        if price_whole:
-            # Combine the whole and fractional parts (if present)
-            price_str = price_whole.get_text().replace(',', '').strip()
-            if price_fraction:
-                price_str += price_fraction.get_text().strip()
-            current_price = float(price_str)
-            print(f"Fetched Amazon price: ₹{current_price}")
-            return current_price
-        else:
-            print("Price element not found on the page.")
-    else:
-        print(f"Failed to fetch the page for Amazon URL. Status code: {response.status_code}")
-    return None
+# Unified price-fetching function
+def fetch_price(url):
+    """
+    Unified function to fetch product prices from supported websites:
+    Amazon, Flipkart, Agaro Lifestyle, Lifelong India Online.
+    """
+    print(f"Fetching price for URL: {url}")
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    response = requests.get(url, headers=headers)
 
-# Scrape prices from Flipkart
-def fetch_price_flipkart(url):
-    print(f"Fetching price for Flipkart URL: {url}")
-    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, 'html.parser')
-        price = soup.find('div', {'class': '_30jeq3'})
-        if price:
-            current_price = float(price.get_text().replace('₹', '').replace(',', ''))
-            print(f"Fetched Flipkart price: ₹{current_price}")
-            return current_price
-    print(f"Failed to fetch price for Flipkart URL: {url}")
-    return None
+    if response.status_code != 200:
+        print(f"Failed to fetch page. Status code: {response.status_code}")
+        return None
+
+    soup = BeautifulSoup(response.content, 'html.parser')
+
+    try:
+        # Amazon Price
+        if "amazon" in url:
+            price_whole = soup.find('span', {'class': 'a-price-whole'})
+            price_fraction = soup.find('span', {'class': 'a-price-fraction'})
+            if price_whole:
+                price = price_whole.get_text().replace(',', '').strip()
+                if price_fraction:
+                    price += price_fraction.get_text().strip()
+                return float(price)
+
+        # Flipkart Price
+        elif "flipkart" in url:
+            price_element = soup.find('div', {'class': 'Nx9bqj'}) or soup.find('div', {'class': '_30jeq3'})
+            if price_element:
+                return float(price_element.get_text().replace('₹', '').replace(',', '').strip())
+
+        # Agaro Lifestyle Price
+        elif "agarolifestyle" in url:
+            price_elements = soup.select('span.price.price--sale span')
+            if price_elements:
+                return float(price_elements[-1].get_text().replace('Rs.', '').replace(',', '').strip())
+
+        # Lifelong India Online Price
+        elif "lifelongindiaonline" in url:
+            price_element = soup.find('h5', {'class': 'hind-semi-bold'})
+            if price_element:
+                return float(price_element.get_text().replace('Rs.', '').replace(',', '').strip())
+
+        else:
+            print(f"Unsupported website for URL: {url}")
+            return None
+
+    except Exception as e:
+        print(f"Error fetching price for {url}: {e}")
+        return None
 
 # Process price data
 def check_price_changes(data):
@@ -70,30 +84,26 @@ def check_price_changes(data):
             url, prev_price = row[0].strip(), float(row[1].strip())
             print(f"URL: {url}, Previous Price: ₹{prev_price}")
             
-            if "amazon" in url:
-                current_price = fetch_price_amazon(url)
-            elif "flipkart" in url:
-                current_price = fetch_price_flipkart(url)
-            else:
-                print(f"Skipping unknown URL format: {url}")
-                continue
+            current_price = fetch_price(url)
             
             if current_price is not None:
                 print(f"Current Price for {url}: ₹{current_price}")
                 if current_price != prev_price:
-                    print(f"Price change detected for {url}: Previous: ₹{prev_price}, Current: ₹{current_price}")
+                    print(f"Price change detected: Previous: ₹{prev_price}, Current: ₹{current_price}")
                     changes.append([url, prev_price, current_price])
                 else:
                     print(f"No price change for {url}.")
+            else:
+                print(f"Could not fetch price for {url}.")
         except Exception as e:
-            print(f"Error processing row {i}: {row}. Error: {e}")  # Corrected line
+            print(f"Error processing row {i}: {row}. Error: {e}")
     return changes
 
 # Send email
 def send_email(to_email, changes):
     print(f"Preparing to send email to {to_email}...")
     from_email = "consultkeerthan@gmail.com"
-    from_password = "nevz gfbi ocqc sduh"
+    from_password = "nevz gfbi ocqc sduh"  # Replace with your App Password
     subject = "Price Change Notification"
     body = "The following items have price changes:\n\n"
     for change in changes:
@@ -130,9 +140,6 @@ def main():
     if not url_data or not email_data:
         print("Failed to retrieve data from Google Sheets.")
         return
-
-    print(f"URL Data: {url_data}")
-    print(f"Email Data: {email_data}")
 
     # Parse email addresses
     emails = [email.strip() for email in email_data[0][0].split(',')]
