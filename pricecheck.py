@@ -29,9 +29,13 @@ def fetch_google_sheet(sheet_id, gid):
 # Load previous prices from CSV
 def load_previous_prices(file_path):
     if not os.path.exists(file_path):
-        print("Previous prices file not found. Creating a new one.")
+        print(f"{file_path} not found. Creating a new one.")
+        # Create an empty file
+        with open(file_path, 'w') as file:
+            pass
         return {}
     
+    # Load the prices if the file exists
     with open(file_path, 'r') as file:
         reader = csv.reader(file)
         previous_prices = {row[0]: float(row[1]) for row in reader if len(row) == 2}
@@ -170,13 +174,18 @@ def commit_and_push_to_git(file_path, commit_message="Update prices"):
 
 
 # Main function
+import os  # Required for file path handling
+
 def main():
     print("Starting the Price Checker script...")
     # Google Sheet IDs
     sheet_id = "1rEWuNwnxkJ8nWyz__lqJbNvykOp5jjtm1iSIADdskQI"
     url_gid = "1012817683"
     email_gid = "1112713903"
-    price_file = "prev_prices.csv"  # Updated file name for storing prices
+    price_file = "prev_prices.csv"  # File to store prices locally
+
+    # Print the absolute file path for debugging
+    print(f"File will be saved to: {os.path.abspath(price_file)}")
 
     # Fetch product URLs and email addresses
     url_data = fetch_google_sheet(sheet_id, url_gid)
@@ -190,7 +199,7 @@ def main():
     emails = [email.strip() for email in email_data[0][0].split(',')]
     print(f"Parsed Emails: {emails}")
 
-    # Check price changes
+    # Check price changes and save to prev_prices.csv
     changes = check_price_changes(url_data, price_file)
 
     # Notify users if changes detected
