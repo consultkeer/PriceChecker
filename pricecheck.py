@@ -122,6 +122,7 @@ def check_price_changes(url_data, price_file):
             print(f"Could not fetch price for {url}")
 
     # Save updated prices
+    print("Updated prices to be saved:", updated_prices)
     save_current_prices(price_file, updated_prices)
     return changes
 
