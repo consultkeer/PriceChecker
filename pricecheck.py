@@ -1,9 +1,23 @@
 import requests
 import smtplib
 import csv
+import os
+import subprocess  # For Git commands
 from bs4 import BeautifulSoup
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+
+# Load previous prices from CSV
+def load_previous_prices(file_path):
+    if not os.path.exists(file_path):
+        print("Previous prices file not found. Creating a new one.")
+        return {}
+    
+    with open(file_path, 'r') as file:
+        reader = csv.reader(file)
+        previous_prices = {row[0]: float(row[1]) for row in reader if len(row) == 2}
+    print(f"Loaded previous prices: {previous_prices}")
+    return previous_prices
 
 # Fetch Google Sheet data
 def fetch_google_sheet(sheet_id, gid):
@@ -75,29 +89,45 @@ def fetch_price(url):
         return None
 
 # Process price data
-def check_price_changes(data):
+def check_price_changes(data, price_file):
     print("Checking for price changes...")
+    previous_prices = load_previous_prices(price_file)
     changes = []
-    for i, row in enumerate(data, start=1):  # No skipping, start index from 1
+    updated_prices = {}
+
+    for i, row in enumerate(data, start=1):
         print(f"Processing row {i}: {row}")
         try:
-            url, prev_price = row[0].strip(), float(row[1].strip())
-            print(f"URL: {url}, Previous Price: ₹{prev_price}")
-            
+            url = row[0].strip()
+            prev_price = previous_prices.get(url, None)
+            print(f"URL: {url}, Previous Price: ₹{prev_price if prev_price else 'N/A'}")
+
             current_price = fetch_price(url)
-            
             if current_price is not None:
+                updated_prices[url] = current_price
                 print(f"Current Price for {url}: ₹{current_price}")
-                if current_price != prev_price:
+
+                if prev_price is not None and current_price != prev_price:
                     print(f"Price change detected: Previous: ₹{prev_price}, Current: ₹{current_price}")
                     changes.append([url, prev_price, current_price])
-                else:
-                    print(f"No price change for {url}.")
+                elif prev_price is None:
+                    print(f"New product added: {url}")
             else:
                 print(f"Could not fetch price for {url}.")
         except Exception as e:
             print(f"Error processing row {i}: {row}. Error: {e}")
+
+    # Save updated prices back to the CSV file
+    save_current_prices(price_file, updated_prices)
     return changes
+
+# Save current prices to CSV
+def save_current_prices(file_path, updated_prices):
+    with open(file_path, 'w', newline='') as file:
+        writer = csv.writer(file)
+        for url, price in updated_prices.items():
+            writer.writerow([url, price])
+    print(f"Saved updated prices to {file_path}")
 
 # Send email
 def send_email(to_email, changes):
@@ -142,6 +172,7 @@ def main():
     sheet_id = "1rEWuNwnxkJ8nWyz__lqJbNvykOp5jjtm1iSIADdskQI"
     url_gid = "1012817683"
     email_gid = "1112713903"
+    price_file = "previous_prices.csv"  # Local file to store prices
 
     # Fetch data
     url_data = fetch_google_sheet(sheet_id, url_gid)
@@ -156,7 +187,7 @@ def main():
     print(f"Parsed Emails: {emails}")
 
     # Check price changes
-    changes = check_price_changes(url_data)
+    changes = check_price_changes(url_data, price_file)
 
     # Notify users
     if changes:
