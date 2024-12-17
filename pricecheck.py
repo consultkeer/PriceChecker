@@ -22,89 +22,77 @@ def fetch_google_sheet(sheet_id, gid):
         return []
 
 # Unified price-fetching function
-def fetch_price_and_name(url):
+def fetch_price(url):
     """
-    Unified function to fetch product prices and product names from supported websites:
+    Unified function to fetch product prices from supported websites:
     Amazon, Flipkart, Agaro Lifestyle, Lifelong India Online.
     """
-    print(f"Fetching price and product name for URL: {url}")
+    print(f"Fetching price for URL: {url}")
     headers = {'User-Agent': 'Mozilla/5.0'}
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
         print(f"Failed to fetch page. Status code: {response.status_code}")
-        return None, None
+        return None
 
     soup = BeautifulSoup(response.content, 'html.parser')
 
     try:
-        # Amazon Price and Product Name
+        # Amazon Price
         if "amazon" in url:
             price_whole = soup.find('span', {'class': 'a-price-whole'})
             price_fraction = soup.find('span', {'class': 'a-price-fraction'})
-            product_name = soup.find('span', {'id': 'productTitle'})
-            if product_name:
-                product_name = product_name.get_text().strip()
             if price_whole:
                 price = price_whole.get_text().replace(',', '').strip()
                 if price_fraction:
                     price += price_fraction.get_text().strip()
-                return float(price), product_name
+                return float(price)
 
-        # Flipkart Price and Product Name
+        # Flipkart Price
         elif "flipkart" in url:
             price_element = soup.find('div', {'class': 'Nx9bqj'}) or soup.find('div', {'class': '_30jeq3'})
-            product_name = soup.find('span', {'class': 'B_NuCI'})
-            if product_name:
-                product_name = product_name.get_text().strip()
             if price_element:
-                return float(price_element.get_text().replace('₹', '').replace(',', '').strip()), product_name
+                return float(price_element.get_text().replace('₹', '').replace(',', '').strip())
 
-        # Agaro Lifestyle Price and Product Name
+        # Agaro Lifestyle Price
         elif "agarolifestyle" in url:
             price_elements = soup.select('span.price.price--sale span')
-            product_name = soup.find('h1', {'class': 'product-title'})
-            if product_name:
-                product_name = product_name.get_text().strip()
             if price_elements:
-                return float(price_elements[-1].get_text().replace('Rs.', '').replace(',', '').strip()), product_name
+                return float(price_elements[-1].get_text().replace('Rs.', '').replace(',', '').strip())
 
-        # Lifelong India Online Price and Product Name
+        # Lifelong India Online Price
         elif "lifelongindiaonline" in url:
             price_element = soup.find('h5', {'class': 'hind-semi-bold'})
-            product_name = soup.find('h1')
-            if product_name:
-                product_name = product_name.get_text().strip()
             if price_element:
-                return float(price_element.get_text().replace('Rs.', '').replace(',', '').strip()), product_name
+                return float(price_element.get_text().replace('Rs.', '').replace(',', '').strip())
 
         else:
             print(f"Unsupported website for URL: {url}")
-            return None, None
+            return None
 
     except Exception as e:
-        print(f"Error fetching data for {url}: {e}")
-        return None, None
+        print(f"Error fetching price for {url}: {e}")
+        return None
 
 # Process price data
 def check_price_changes(data):
     print("Checking for price changes...")
     changes = []
-    for i, row in enumerate(data, start=1):
+    for i, row in enumerate(data, start=1):  # No skipping, start index from 1
         print(f"Processing row {i}: {row}")
         try:
             url, prev_price = row[0].strip(), float(row[1].strip())
             print(f"URL: {url}, Previous Price: ₹{prev_price}")
             
-            current_price, product_name = fetch_price_and_name(url)
-
+            current_price = fetch_price(url)
+            
             if current_price is not None:
-                print(f"Current Price for {product_name}: ₹{current_price}")
+                print(f"Current Price for {url}: ₹{current_price}")
                 if current_price != prev_price:
-                    print(f"Price change detected for {product_name}: Previous: ₹{prev_price}, Current: ₹{current_price}")
-                    changes.append([product_name, prev_price, current_price])
+                    print(f"Price change detected: Previous: ₹{prev_price}, Current: ₹{current_price}")
+                    changes.append([url, prev_price, current_price])
                 else:
-                    print(f"No price change for {product_name}.")
+                    print(f"No price change for {url}.")
             else:
                 print(f"Could not fetch price for {url}.")
         except Exception as e:
@@ -117,15 +105,25 @@ def send_email(to_email, changes):
     from_email = "consultkeerthan@gmail.com"
     from_password = "nevz gfbi ocqc sduh"  # Replace with your App Password
     subject = "Price Change Notification"
-    body = "The following items have price changes:\n\n"
-    for change in changes:
-        body += f"URL: {change[0]}\nPrevious Price: ₹{change[1]}\nCurrent Price: ₹{change[2]}\n\n"
 
+    body = "The following items have price changes:\n\n"
+    body += "<html><body><ul>"
+
+    for change in changes:
+        url, prev_price, current_price = change
+        product_name = url.split("/")[-1].replace("-", " ").replace("%20", " ")  # Extract and clean product name
+        product_name = product_name[:60]  # Optional: Truncate to 60 characters for neatness
+        hyperlink = f"<a href='{url}'>{product_name}</a>"
+        body += f"<li>{hyperlink}: Previous Price: ₹{prev_price}, Current Price: ₹{current_price}</li>"
+
+    body += "</ul></body></html>"
+
+    # Email content setup
     message = MIMEMultipart()
     message['From'] = from_email
     message['To'] = to_email
     message['Subject'] = subject
-    message.attach(MIMEText(body, 'plain'))
+    message.attach(MIMEText(body, 'html'))  # Note: Set content type as HTML
 
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
