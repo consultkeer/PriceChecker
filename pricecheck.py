@@ -7,6 +7,24 @@ from bs4 import BeautifulSoup
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+# Fetch Google Sheet data
+def fetch_google_sheet(sheet_id, gid):
+    """
+    Fetch data from a Google Sheet (CSV format) using the Sheet ID and GID.
+    """
+    print(f"Fetching data from Google Sheet: Sheet ID {sheet_id}, GID {gid}")
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        print("Successfully fetched Google Sheet data.")
+        decoded_content = response.content.decode('utf-8')
+        reader = csv.reader(decoded_content.splitlines())
+        data = [row for row in reader]
+        print(f"Fetched {len(data)} rows from the sheet.")
+        return data
+    else:
+        print(f"Failed to fetch data from Sheet GID {gid}. Status code: {response.status_code}")
+        return []
 
 # Load previous prices from CSV
 def load_previous_prices(file_path):
@@ -154,10 +172,11 @@ def commit_and_push_to_git(file_path, commit_message="Update prices"):
 # Main function
 def main():
     print("Starting the Price Checker script...")
-    sheet_id = "1rEWuNwnxkJ8nWyz__lqJbNvykOp5jjtm1iSIADdskQI"
-    url_gid = "1012817683"
-    email_gid = "1112713903"
-    price_file = "previous_prices.csv"
+    # Google Sheet IDs
+    sheet_id = "1rEWuNwnxkJ8nWyz__lqJbNvykOp5jjtm1iSIADdskQI"  # Replace with your actual Google Sheet ID
+    url_gid = "1012817683"  # Sheet tab ID for product URLs
+    email_gid = "1112713903"  # Sheet tab ID for email addresses
+    price_file = "previous_prices.csv"  # Local file to store prices
 
     # Fetch product URLs and email addresses
     url_data = fetch_google_sheet(sheet_id, url_gid)
@@ -167,14 +186,18 @@ def main():
         print("Failed to retrieve data from Google Sheets.")
         return
 
+    # Parse email addresses
     emails = [email.strip() for email in email_data[0][0].split(',')]
+    print(f"Parsed Emails: {emails}")
+
+    # Check price changes
     changes = check_price_changes(url_data, price_file)
 
+    # Notify users if changes detected
     if changes:
-        print("Price changes detected. Sending notifications...")
+        print("Detected price changes. Sending notifications...")
         for email in emails:
             send_email(email, changes)
-
         commit_and_push_to_git(price_file, "Update product prices after script run")
     else:
         print("No price changes detected.")
